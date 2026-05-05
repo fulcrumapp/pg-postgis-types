@@ -3,6 +3,7 @@ import { parse as parseArray } from 'postgres-array';
 import pgCustomTypes from '@fulcrumapp/pg-custom-types';
 import pg from 'pg';
 
+export type { Geometry } from 'well-known-parser';
 export type GeometryParser = (value: string) => unknown;
 export type ExecFn = (sql: string, callback: (err: Error | null, result?: unknown) => void) => void;
 
