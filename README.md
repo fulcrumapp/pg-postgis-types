@@ -1,88 +1,103 @@
-# pg-postgis-types [![Build Status](https://travis-ci.org/zhm/pg-postgis-types.svg?branch=master)](https://travis-ci.org/zhm/pg-postgis-types)
+# @fulcrumapp/pg-postgis-types
 
 Use PostGIS geometry types with [node-postgres](https://github.com/brianc/node-postgres).
 
-This module registers parsers for the PostGIS geometry types. You can also plug in your own WKB parser.
+Registers parsers for PostGIS geometry types. You can also plug in your own WKB parser.
 
 ## Installation
 
 ```sh
-npm install pg-postgis-types
+npm install @fulcrumapp/pg-postgis-types
 ```
-
-### Documentation
-
-### `postgis(fetcher, key, callback)`
-
-Fetches the OIDs for the given types.
-
-### Parameters
-
-| parameter       | type               | description                                                           |
-| --------------- | ------------------ | --------------------------------------------------------------------- |
-| `fetcher`       | Function           | The function to query of the form `function (sql, callback)           |
-| `key`           | String             | A unique string to key the type map with (e.g. the connection string) |
-| `callback`      | Function           | The callback to call after the types are fetched                      |
-
-Callback is called with an error argument.
-
-### `postgis.isGeometryType(oid, key)`
-
-Returns true if the given OID is a geometry or geography type
-
-### Parameters
-
-| parameter       | type               | description                                                           |
-| --------------- | ------------------ | --------------------------------------------------------------------- |
-| `oid`           | Number             | The oid of a column                                                   |
-| `key`           | String             | A unique string to key the type map with (e.g. the connection string) |
-
-
-### `postgis.setGeometryParser(parser)`
-
-Setup a custom parser for geometry/geography columns. The parser is a function that accepts one
-argument for the string value to parse. The library uses `wkx` by default to parse goemetries. You
-can use this if you want to use your own WKB parser.
-
-### Parameters
-
-| parameter       | type               | description                                               |
-| --------------- | ------------------ | --------------------------------------------------------- |
-| `parser`        | Function           | The custom parser to use for geometry columns             |
-
 
 ## Example
 
-```js
-var pg = require('pg');
-var postgis = require('pg-postgis-types');
-var pgtypes = require('pg-custom-types');
+```ts
+import { Pool } from 'pg';
+import postgis from '@fulcrumapp/pg-postgis-types';
+import pgCustomTypes from 'pg-custom-types';
 
-var connection = 'some connection string';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-postgis(pgtypes.fetcher(pg, connection), null, (err, oids) {
-  if (err) {
-    throw err;
-  }
+const exec = (sql: string, callback: (err: Error | null, result?: unknown) => void) => {
+  pool.query(sql).then((r) => callback(null, r)).catch(callback);
+};
 
-  pg.connect(connection, function (err, client, done) {
-    if (err) {
-      return callback(err);
-    }
+// Initialize once at startup — registers pg type parsers
+await postgis(exec, null);
 
-    var sql = "SELECT ST_GeomFromText('POINT(1 2)') AS geom";
-
-    client.query(sql, null, function (err, results) {
-      done();
-
-      if (err) {
-        throw err;
-      }
-
-      var geojson = results.rows[0].geom.toGeoJSON();
-
-      // do something cool with geojson
-    });
-  });
-});
+const result = await pool.query("SELECT ST_GeomFromText('POINT(1 2)') AS geom");
+console.log(result.rows[0].geom.toGeoJSON()); // { type: 'Point', coordinates: [1, 2] }
 ```
+
+## API
+
+### `postgis(exec, key)`
+
+Fetches PostGIS OIDs and registers type parsers with `pg`. Returns a `Promise<void>`.
+
+| parameter | type | description |
+| --------- | ---- | ----------- |
+| `exec` | `ExecFn` | A function of the form `(sql, callback) => void` used to query the database |
+| `key` | `string \| null` | A unique key to namespace the type map (e.g. a schema name). Use `null` for the default schema. |
+
+### `postgis.isGeometryType(oid, key)`
+
+Returns `true` if the given OID is a geometry or geography type.
+
+### `postgis.setGeometryParser(parser)`
+
+Replaces the default WKB parser (`wkx`) with a custom one. The parser receives the raw hex string and should return a parsed geometry value.
+
+### `postgis.getTypeParser(oid, key)`
+
+Returns the registered parser function for the given OID, or `undefined`.
+
+### `postgis.getTypeName(oid, key)` / `postgis.getTypeOID(name, key)`
+
+Bidirectional lookup between OIDs and type names.
+
+### `postgis.typename(typmod)`
+
+Returns a human-readable type string from a PostgreSQL `typmod` value, e.g. `(Point,4326)`.
+
+### `postgis.typeobj(typmod)`
+
+Returns `{ type, srid, z, m, ndims }` decoded from a `typmod`.
+
+### `postgis.geometryTypes`
+
+Array of PostGIS geometry type names indexed by type code.
+
+## Development
+
+```sh
+npm install
+npm run build
+npm test
+npm run lint
+```
+
+## Publishing
+
+Releases are driven by git tags. The CI workflow reads the tag, sets `package.json` version to match, builds, and publishes to GitHub Packages — so the tag is always the source of truth.
+
+To release:
+
+```sh
+# 1. Bump the version in package.json and commit
+npm version 4.1.0 --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore: bump version to 4.1.0"
+git push
+
+# 2. Tag and push — this triggers the publish workflow
+git tag v4.1.0
+git push origin v4.1.0
+```
+
+The publish workflow will set `package.json` version from the tag before building, so even if they diverge the published artifact will always reflect the tag.
+
+## License
+
+BSD-3-Clause

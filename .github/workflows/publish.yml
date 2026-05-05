@@ -1,0 +1,74 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: '@fulcrumapp'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Create test database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -U postgres -h localhost -c "CREATE DATABASE pg_custom_types"
+          psql -U postgres -h localhost -d pg_custom_types -c "CREATE EXTENSION postgis"
+          psql -U postgres -h localhost -d pg_custom_types -c "CREATE TABLE test (name text, geom geometry(Point, 4326))"
+          psql -U postgres -h localhost -d pg_custom_types -c "INSERT INTO test (name, geom) SELECT 'FL', ST_GeomFromText('POINT (-82 27)', 4326)"
+
+      - name: Test
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost/pg_custom_types
+
+      - name: Set version from tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="${TAG#v}"
+          echo "Setting package version to ${TAG}"
+          npm version "${TAG}" --no-git-tag-version --allow-same-version
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to GitHub Packages
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

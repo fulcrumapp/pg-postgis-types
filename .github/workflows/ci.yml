@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Create test database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -U postgres -h localhost -c "CREATE DATABASE pg_custom_types"
+          psql -U postgres -h localhost -d pg_custom_types -c "CREATE EXTENSION postgis"
+          psql -U postgres -h localhost -d pg_custom_types -c "CREATE TABLE test (name text, geom geometry(Point, 4326))"
+          psql -U postgres -h localhost -d pg_custom_types -c "INSERT INTO test (name, geom) SELECT 'FL', ST_GeomFromText('POINT (-82 27)', 4326)"
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost/pg_custom_types
