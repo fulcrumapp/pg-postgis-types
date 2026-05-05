@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 
 import { Pool } from 'pg';
-import wkx from 'wkx';
+import { parse as parseWkb } from 'well-known-parser';
 import postgis, { type ExecFn } from '../src/index';
 
 const CONNECTION =
@@ -124,7 +124,7 @@ describe('postgis types', () => {
 
     // Restore default parser so subsequent tests are unaffected
     postgis.setGeometryParser((value: string) =>
-      wkx.Geometry.parse(Buffer.from(value, 'hex')),
+      parseWkb(Buffer.from(value, 'hex')),
     );
   });
 });
