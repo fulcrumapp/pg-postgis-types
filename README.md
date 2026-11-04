@@ -80,23 +80,17 @@ npm run lint
 
 ## Publishing
 
-Releases are driven by git tags. The CI workflow reads the tag, sets `package.json` version to match, builds, and publishes to GitHub Packages — so the tag is always the source of truth.
+Pull requests, merge queue entries and main changes run CI on GitHub-hosted
+runners. After main validation succeeds, a GitHub App commits the next version
+to `package.json` and creates its matching SemVer tag. Do not edit the root
+package version manually. Tag creation starts the GitHub Packages publishing
+workflow; this repository does not publish to npmjs.org.
 
-To release:
-
-```sh
-# 1. Bump the version in package.json and commit
-npm version 4.1.0 --no-git-tag-version
-git add package.json package-lock.json
-git commit -m "chore: bump version to 4.1.0"
-git push
-
-# 2. Tag and push — this triggers the publish workflow
-git tag v4.1.0
-git push origin v4.1.0
-```
-
-The publish workflow will set `package.json` version from the tag before building, so even if they diverge the published artifact will always reflect the tag.
+Before enabling releases, configure fork-run approval, required CI checks,
+GitHub Packages access, and the release App's branch and tag protection
+bypasses. Disable the old Tekton publisher at cutover. If publishing fails,
+rerun the tag workflow against the same tag; it verifies the release commit and
+the package version before publishing.
 
 ## License
 
