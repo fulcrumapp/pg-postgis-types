@@ -1,6 +1,6 @@
 {
   "name": "@fulcrumapp/pg-postgis-types",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "PostGIS data types for node-postgres",
   "homepage": "https://github.com/zhm/pg-postgis-types",
   "main": "./dist/index.cjs",
