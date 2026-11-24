@@ -1,51 +1,48 @@
-name: Publish
+name: Publish npm package to GitHub Packages
 
 on:
-  push:
-    tags:
-      - 'v*'
+  create:
+  workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: ${{ github.repository }}-npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   publish:
+    name: Publish to GitHub Packages
+    if: (github.event_name == 'create' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Use Node.js 22
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          node-version: 22
-          registry-url: https://npm.pkg.github.com
-          scope: '@fulcrumapp'
-          cache: npm
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.14.0'
+      - uses: ./.github/actions/npm-publish-github
+        with:
+          token: ${{ github.token }}
 
-      - name: Install dependencies
-        run: npm ci
+  release:
+    name: Create GitHub release notes
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/npm-create-release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Set version from tag
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          TAG="${TAG#v}"
-          echo "Setting package version to ${TAG}"
-          npm version "${TAG}" --no-git-tag-version --allow-same-version
-
-      - name: Build
-        run: npm run build
-
-      - name: Publish to GitHub Packages
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
